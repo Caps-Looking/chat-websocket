@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../node_modules/font-awesome/css/font-awesome.min.css">
+
+    <script src="../node_modules/angular/angular.min.js"></script>
+    <script src="../node_modules/sockjs-client/dist/sockjs.min.js"></script>
+    <script src="../node_modules/stompjs/lib/stomp.min.js"></script>
+    <script src="../node_modules/jquery/dist/jquery.min.js"></script>
+    <script src="../node_modules/bootstrap/dist/js/bootstrap.min.js"></script>
+    <script src="../app.js"></script>
+    <script src="../auth/authService.js"></script>
+    <script src="./chatService.js"></script>
+    <script src="./chatController.js"></script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>WebSocket - Chat</title>
+</head>
+
+<style>
+    .all {
+        color: red;
+    }
+</style>
+
+<body ng-app="app" ng-controller="chatController">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <a class="navbar-brand" href="#"></a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <a class="navbar-brand" href="#">Webchat</a>
+
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item active">
+                    <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
+                </li>
+                <li class="nav-item dropdown" ng-show="user.admin">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Registrer
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarDropdown" ng-show="user.admin">
+                        <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalUserResgistry">User</a>
+                    </div>
+                </li>           
+            </ul>
+            <div class="mr-5">
+                <span style="color: white;" ng-show="connected" class="mr-2">Connected at: <b>{{channel}}</b></span>
+                <span style="color: white;">Logged as: <b>{{user.username}}</b></span>
+            </div>
+            <div class="row">
+                <button class="btn btn-primary" data-toggle="modal" data-target="#modalConnect" ng-show="!connected">Connect</button>
+                <button class="btn btn-danger" ng-click="disconnect()" ng-show="connected">Disconnect</button>
+                <button class="btn btn-light ml-3 mr-3" ng-click="logout()">
+                    Logout
+                    <i class="fa fa-sign-out"></i>
+                </button>  
+            </div>
+
+        </div>
+    </nav>
+
+    <div ng-hide="alert.message == null" class="alert alert-{{alert.messageType}}" role="alert">
+        {{alert.message}}
+    </div>
+
+    <div ng-init="disconnect()" class="container">
+        <div ng-show="connected">
+            <div class="row mt-5">
+                <textarea class="form-control col-md-10" type="text" ng-model="messageToBeSend" placeholder="Write a message..." rows="3"></textarea>
+                <div class="col-md-2">
+                    <button class="btn btn-primary" ng-click="sendMessage()">Send</button><br>                
+                    <button class="btn btn-primary mt-1" ng-show="user.admin" ng-click="sendMessageToAll()">Send to All</button>
+                </div>
+            </div>
+        </div>
+
+        <table ng-show="connected" class="table mt-5">
+            <tbody>
+                <tr ng-repeat="message in messages | orderBy : 'id' : true" ng-class="{'all': message.chatAll}">
+                    <th>{{message.applicationUser.username}} says:</th>
+                    <th>{{message.text}}</th>
+                    <th>{{message.time}}</th>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="modal fade" id="modalConnect" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Choose a channel</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="row ml-5">
+                        <input class="form-control col-md-6" type="text" placeholder="Choose the channel" ng-model="channel" />
+                        <button class="btn btn-primary col-md-3 ml-4" ng-click="connect()" ng-show="!connected" data-dismiss="modal">Connect</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalUserResgistry" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Register a new user!</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="row ml-1">
+                        <label for="username" class="col-sm-4 col-form-label">Username:</label>
+                        <input class="form-control col-md-7" id="username" type="text" placeholder="Username" ng-model="credentials.username" />
+                    </div>
+                    <div class="row ml-1 mt-2">
+                        <label for="password" class="col-sm-4 col-form-label">Password:</label>
+                        <input class="form-control col-md-7" id="password" type="password" placeholder="Password" ng-model="credentials.password" />
+                    </div>
+                    <div class="row ml-1 mt-2">
+                        <div class="form-check ml-3">
+                            <input class="form-check-input" type="checkbox" value="" id="admin" ng-model="credentials.admin">
+                            <label class="form-check-label" for="admin">
+                                Admin
+                            </label>
+                        </div>                        
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="text-right">
+                        <button class="btn btn-success" ng-click="save(credentials)" data-dismiss="modal">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+</body>
+<script>
+    $(document).ready(function() {
+        $('#modalConnect').modal('show');
+    });
+</script>
+</html>
